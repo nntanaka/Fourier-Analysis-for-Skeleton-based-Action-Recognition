@@ -1,0 +1,29 @@
+weights: 
+
+# feeder
+feeder: feeder.feeder_ntu.Feeder
+test_feeder_args:
+  data_path:  ./fourier_analysis/dataset/ntu60/NTU60_CS.npz
+  split: test
+  window_size: 64
+  p_interval: [0.95]
+  vel: False
+  bone: False
+  debug: False
+  true_data: stgcn_joint_new_indices.pkl
+
+# model
+model: net.st_gcn.Model
+model_args:
+  in_channels: 3
+  num_class: 60
+  dropout: 0.5
+  edge_importance_weighting: True
+  graph_args:
+    layout: 'ntu-rgb+d'
+    strategy: 'spatial'
+
+# test 
+phase: test
+device: 0
+test_batch_size: 64
