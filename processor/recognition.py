@@ -418,6 +418,87 @@ class REC_Processor(Processor):
         
         return data_adversarial
         
+    def smart_attack(self, data, label, index, num_sub, valid_frame_num, head):
+        
+        data_adversarial = data.clone()
+        batch_size = data.size()[0]
+        loss_weight = 0.4
+        loss_alpha = 0.3
+        loss_beta0 = 0.6
+        loss_beta2 = 0.4
+        deltaT = 1/30
+        
+        p=0.95
+        begin=torch.zeros(batch_size, dtype=torch.int32).cuda()
+        end = valid_frame_num.cuda()
+        C, V, M = 3, 25, 2
+        window = 64
+        bias = ((1-p) * valid_frame_num/2).to(torch.int32).cuda()
+        ntu_pairs = (
+        (1, 2), (2, 21), (3, 21), (4, 3), (5, 21), (6, 5),
+        (7, 6), (8, 7), (9, 21), (10, 9), (11, 10), (12, 11),
+        (13, 1), (14, 13), (15, 14), (16, 15), (17, 1), (18, 17),
+        (19, 18), (20, 19), (22, 23), (21, 21), (23, 8), (24, 25),(25, 12)
+        )
+        joint_weights = torch.Tensor([[[[0.04, 0.04, 0.04, 0.04, 0.02,
+                                      0.02, 0.02, 0.02, 0.02, 0.02,
+                                      0.02, 0.02, 0.02, 0.02, 0.02,
+                                      0.02, 0.02, 0.02, 0.02, 0.02,
+                                      0.04, 0.02, 0.02, 0.02, 0.02]]]]).cuda()
+        
+        bone_vec = torch.zeros_like(data)
+        for v1, v2 in ntu_pairs:
+            bone_vec[:, :, :, v1 - 1] = data[:, :, :, v1 - 1] - data[:, :, :, v2 - 1]+ 1e-8
+        
+        acc_list = [compute_acc(data[i], end[i], deltaT) for i in range(batch_size)]
+        data_adversarial.requires_grad = True
+        optimizer = torch.optim.Adam([data_adversarial], lr=0.001)
+        for i in range(self.arg.iter_num):
+            o_loss = oLoss(data, data_adversarial, joint_weights)
+            data_list = list()
+            ad_bone_vec = torch.zeros_like(data_adversarial)
+            for v1, v2 in ntu_pairs:
+                ad_bone_vec[:, :, :, v1 - 1] = data_adversarial[:, :, :, v1 - 1] - data_adversarial[:, :, :, v2 - 1]+ 1e-8
+            acc_loss = 0
+            bl_loss = 0
+            for j in range(batch_size):
+                bl_loss += boneLengthLoss(bone_vec[j], ad_bone_vec[j], end[j])
+                acc_loss += accLoss(acc_list[j], compute_acc(data_adversarial[j], end[j], deltaT))
+                data_pre = data_adversarial[j, :, begin[j]+bias[j]:end[j]-bias[j], :, :]# center_crop
+                cropped_length = data_pre.shape[1]
+                data_pre = (data_pre.permute(0, 2, 3, 1).contiguous().view(3 * 25 * 2, cropped_length))[None, None, :, :]
+                data_pre = F.interpolate(data_pre, size=(C * V * M, window), mode='bilinear',align_corners=False).squeeze() # could perform both up sample and down sample
+                data_list.append(data_pre.contiguous().view(C, V, M, window).permute(0, 3, 1, 2).contiguous())
+            data_adversarial_processed = torch.stack(data_list, dim=0)
+            acc_loss /= batch_size
+            bl_loss /= batch_size
+            
+            if self.arg.attack_bone:
+                data_adversarial_processed2 = torch.zeros_like(data_adversarial_processed)
+                for v1, v2 in ntu_pairs:
+                    data_adversarial_processed2[:, :, :, v1 - 1] = data_adversarial_processed[:, :, :, v1 - 1] - data_adversarial_processed[:, :, :, v2 - 1]
+            else:
+                data_adversarial_processed2 = data_adversarial_processed
+            
+            if self.arg.attack_vel:
+                input_adversarial = torch.cat([data_adversarial_processed2[:, :, 1:] - data_adversarial_processed2[:, :, :-1], torch.zeros((batch_size, 3, 1, 25, 2), dtype=torch.float).cuda()], dim=2)
+            else:
+                input_adversarial = data_adversarial_processed2
+            output = self.model(input_adversarial)
+            #print(o_loss, acc_loss, bl_loss)
+            p_loss = loss_alpha * (loss_beta0 * o_loss + loss_beta2 * acc_loss) + (1 - loss_alpha) * bl_loss
+            c_loss = -torch.nn.functional.cross_entropy(output, label)
+            #print(c_loss)
+            all_loss = loss_weight * c_loss + (1 - loss_weight) * p_loss
+            optimizer.zero_grad()
+            #print(torch.argmax(output, axis=1)==label)     
+            all_loss.backward()
+            optimizer.step()
+            with torch.no_grad():
+                data_adversarial[num_sub==1, :, :, :, 1] = 0
+        
+                  
+        return data_adversarial.detach() 
             
     def adversarial_attack(self):
         self.model.eval()
@@ -439,24 +520,45 @@ class REC_Processor(Processor):
         adversarial_examples = torch.cat(adversarial_examples, dim=0).numpy()
         
         if self.arg.attack_free:
-            if self.arg.attack_bone and self.arg.attack_vel:
-                np.savez('stgcn_free_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-            elif self.arg.attack_bone and (not self.arg.attack_vel):
-                np.savez('stgcn_free_bone_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-            elif (not self.arg.attack_bone) and self.arg.attack_vel:
-                np.savez('stgcn_free_jointvel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-            elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
-                np.savez('stgcn_free_joint_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-            return
+            if smart:
+                if self.arg.attack_bone and self.arg.attack_vel:
+                    np.savez('stgcn_smart_free_bonevel_AE', x_test=adversarial_examples)
+                elif self.arg.attack_bone and (not self.arg.attack_vel):
+                    np.savez('stgcn_smart_free_bone_AE', x_test=adversarial_examples)
+                elif (not self.arg.attack_bone) and self.arg.attack_vel:
+                    np.savez('stgcn_smart_free_jointvel_AE', x_test=adversarial_examples)
+                elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
+                    np.savez('stgcn_smart_free_joint_new5_AE', x_test=adversarial_examples)
+            else:
+                if self.arg.attack_bone and self.arg.attack_vel:
+                    np.savez('stgcn_free_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+                elif self.arg.attack_bone and (not self.arg.attack_vel):
+                    np.savez('stgcn_free_bone_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+                elif (not self.arg.attack_bone) and self.arg.attack_vel:
+                    np.savez('stgcn_free_jointvel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+                elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
+                    np.savez('stgcn_free_joint_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+                return
         
-        if self.arg.attack_bone and self.arg.attack_vel:
-            np.savez('stgcn_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-        elif self.arg.attack_bone and (not self.arg.attack_vel):
-            np.savez('stgcn_bone_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-        elif (not self.arg.attack_bone) and self.arg.attack_vel:
-            np.savez('stgcn_jointvel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
-        elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
-            np.savez('stgcn_joint_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+        if smart:
+            if self.arg.attack_bone and self.arg.attack_vel:
+                np.savez('stgcn_smart_bonevel_AE', x_test=adversarial_examples)
+            elif self.arg.attack_bone and (not self.arg.attack_vel):
+                np.savez('stgcn_smart_bone_AE', x_test=adversarial_examples)
+            elif (not self.arg.attack_bone) and self.arg.attack_vel:
+                np.savez('stgcn_smart_jointvel_AE', x_test=adversarial_examples)
+            elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
+                np.savez('stgcn_smart_joint_new5_AE', x_test=adversarial_examples)
+        else:
+            if self.arg.attack_bone and self.arg.attack_vel:
+                np.savez('stgcn_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+            elif self.arg.attack_bone and (not self.arg.attack_vel):
+                np.savez('stgcn_bone_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+            elif (not self.arg.attack_bone) and self.arg.attack_vel:
+                np.savez('stgcn_jointvel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+            elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
+                np.savez('stgcn_joint_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
+
 
 
     @staticmethod
