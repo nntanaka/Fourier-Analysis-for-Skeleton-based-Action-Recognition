@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # pylint: disable=W0201
 import sys
+import os
 import argparse
 import yaml
 import numpy as np
@@ -247,8 +248,10 @@ class REC_Processor(Processor):
     
     def fourier_heatmap(self):
         U = self.get_graph_spectral()
+        if not os.path.exists('fourier_heatmap'):
+            os.mkdir('fourier_heatmap')
         for norm in [0.5, 1.5, 3]:
-            if self.arg.fourier_map:
+            if self.arg.fourier_heatmap:
                 self.map_norm = norm
                 np.random.seed(0)
             for i in tqdm(range(25)):
@@ -289,7 +292,6 @@ class REC_Processor(Processor):
                 output = self.model(data)
                 #get accuracy
                 correct += (output.argmax(1) == label).type(torch.float).sum().item()
-                #print(output.argmax(1)[0], label[0])
             current_acc = correct / size
             self.epoch_info['accuracy'] = current_acc
             if self.arg.map_free:
@@ -306,7 +308,6 @@ class REC_Processor(Processor):
             data = data.float().to(self.dev)
             batch_size = data.size()[0]
             label = label.long().to(self.dev)
-            #sub = sub.numpy()
 
             # inference
             with torch.no_grad():
@@ -316,11 +317,9 @@ class REC_Processor(Processor):
             loss = self.loss(output, label)
             loss_value.append(loss.item())
             
-            #print(index[output.argmax(1)!= label])
             
             #get accuracy
             correct += (output.argmax(1) == label).type(torch.float).sum().item()
-            #print(output.argmax(1)[0], label[0])
             
             if self.arg.save_ae:
                 data_list.append(data.cpu()[output.cpu().argmax(1) != label.cpu()].numpy())
@@ -333,16 +332,13 @@ class REC_Processor(Processor):
         current_acc = correct / size
         self.epoch_info['accuracy'] = current_acc
         
-        #with open('norm_gauss_spatial_temporal_new.txt', 'a') as f:
-        #    f.write('{:s} {:s} {:s} {:d} {:.10f}\n'.format(self.arg.input_type, self.arg.method, self.arg.band, self.arg.band_width, current_acc))
-        
         if self.arg.save_ae:
-            with open('stgcn_free_bonevel_indices.pkl', 'rb') as f:
+            with open(self.arg.ind_name, 'rb') as f:
                 true_indices = pickle.load(f)
-            np.savez('stgcn_free_bonevel_falseAE_01'.format(self.arg.epsilon), x_test=np.concatenate(data_list, axis=0), indices=np.array(indices), true_indices=np.array(true_indices))
+            np.savez('stgcn_joint_misclassified_AE'.format(self.arg.epsilon), x_test=np.concatenate(data_list, axis=0), indices=np.array(indices), true_indices=np.array(true_indices))
         
         if self.arg.save_ind:
-            with open('stgcn_free_bonevel_indices.pkl', 'wb') as f:
+            with open(self.arg.ind_name, 'wb') as f:
                 pickle.dump(indices, f)
             print(len(indices) / size)
                     
@@ -485,13 +481,10 @@ class REC_Processor(Processor):
             else:
                 input_adversarial = data_adversarial_processed2
             output = self.model(input_adversarial)
-            #print(o_loss, acc_loss, bl_loss)
             p_loss = loss_alpha * (loss_beta0 * o_loss + loss_beta2 * acc_loss) + (1 - loss_alpha) * bl_loss
             c_loss = -torch.nn.functional.cross_entropy(output, label)
-            #print(c_loss)
             all_loss = loss_weight * c_loss + (1 - loss_weight) * p_loss
-            optimizer.zero_grad()
-            #print(torch.argmax(output, axis=1)==label)     
+            optimizer.zero_grad()  
             all_loss.backward()
             optimizer.step()
             with torch.no_grad():
@@ -500,7 +493,7 @@ class REC_Processor(Processor):
                   
         return data_adversarial.detach() 
             
-    def adversarial_attack(self):
+    def adversarial_attack(self, smart=False):
         self.model.eval()
         loader = self.data_loader['test']
         correct = 0
@@ -528,7 +521,7 @@ class REC_Processor(Processor):
                 elif (not self.arg.attack_bone) and self.arg.attack_vel:
                     np.savez('stgcn_smart_free_jointvel_AE', x_test=adversarial_examples)
                 elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
-                    np.savez('stgcn_smart_free_joint_new5_AE', x_test=adversarial_examples)
+                    np.savez('stgcn_smart_free_joint_AE', x_test=adversarial_examples)
             else:
                 if self.arg.attack_bone and self.arg.attack_vel:
                     np.savez('stgcn_free_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
@@ -548,7 +541,7 @@ class REC_Processor(Processor):
             elif (not self.arg.attack_bone) and self.arg.attack_vel:
                 np.savez('stgcn_smart_jointvel_AE', x_test=adversarial_examples)
             elif (not self.arg.attack_bone) and (not self.arg.attack_vel):
-                np.savez('stgcn_smart_joint_new5_AE', x_test=adversarial_examples)
+                np.savez('stgcn_smart_joint_AE', x_test=adversarial_examples)
         else:
             if self.arg.attack_bone and self.arg.attack_vel:
                 np.savez('stgcn_bonevel_AE_{:.2f}'.format(self.arg.epsilon), x_test=adversarial_examples)
@@ -586,10 +579,11 @@ class REC_Processor(Processor):
         parser.add_argument('--attack-vel', type=str2bool, default=False, help='wheter you attack vel model or not')
         parser.add_argument('--attack-bone', type=str2bool, default=False, help='wheter you attack bone model or not')
         parser.add_argument('--attack-free', type=str2bool, default=False, help='wheter you attack free trained model or not')
-        parser.add_argument('--free-iter', type=int, default=4, help='the iteration number of adversarial attack in free')
+        parser.add_argument('--free-iter', type=int, default=4)
         parser.add_argument('--save-ae', type=str2bool, default=False)
         parser.add_argument('--save-ind', type=str2bool, default=False)
-        parser.add_argument('--fourier-map', type=str2bool, default=False)
+        parser.add_argument('--ind-name', type=str)
+        parser.add_argument('--fourier-heatmap', type=str2bool, default=False)
         parser.add_argument('--map-free', type=str2bool, default=False)
         parser.add_argument('--input-type', choices=['joint', 'jointvel', 'bone', 'bonevel'])
         
