@@ -7,7 +7,7 @@ Our Paper is [here](https://arxiv.org/abs/2305.17939).
 
 In this code, we use [NTU RGB+D dataset](https://arxiv.org/pdf/1604.02808.pdf) and [ST-GCN model](https://arxiv.org/abs/1801.07455).
 
-![Test Image 1](fig/abstruct.png)
+![Image](fig/abstruct.png)
 
 ## Abstruct
 Using Fourier analysis, we explore the robustness and vulnerability of graph convolutional neural networks (GCNs) for skeleton-based action recognition. We adopt a joint Fourier transform (JFT), a combination of the graph Fourier transform (GFT) and the discrete Fourier transform (DFT), to examine the robustness of adversarially-trained GCNs against adversarial attacks and common corruptions. Experimental results with the NTU RGB+D dataset reveal that adversarial training does not introduce a robustness trade-off between adversarial attacks and low-frequency perturbations, which typically occurs during image classification based on convolutional neural networks. This finding indicates that adversarial training is a practical approach to enhancing robustness against adversarial attacks and common corruptions in skeleton-based action recognition. Furthermore, we find that the Fourier approach cannot explain vulnerability against skeletal part occlusion corruption, which highlights its limitations. These findings extend our understanding of the robustness of GCNs, potentially guiding the development of more robust learning methods for skeleton-based action recognition.
@@ -47,7 +47,7 @@ To train the model, run;
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/train_joint.yaml
 ```
-If you train the model by adversarial training, run;
+When you train the model by adversarial training, run;
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/train_free_joint.yaml
 ```
