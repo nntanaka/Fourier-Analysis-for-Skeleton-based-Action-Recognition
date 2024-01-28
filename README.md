@@ -140,7 +140,7 @@ Nariki Tanaka, Hiroshi Kera, Kazuhiko Kawamoto, Fourier analysis on robustness o
 
 @article{TANAKA2024103936,
 title = {Fourier analysis on robustness of graph convolutional neural networks for skeleton-based action recognition},
-journal = {Computer Vision and Image Understanding (CVIU)},
+journal = {Computer Vision and Image Understanding},
 volume = {240},
 pages = {103936},
 year = {2024},
