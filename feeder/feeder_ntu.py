@@ -8,23 +8,8 @@ from feeder import tools
 class Feeder(Dataset):
     def __init__(self, data_path, label_path=None, p_interval=1, split='train', random_choose=False, random_shift=False,
                  random_move=False, random_rot=False, window_size=-1, normalization=False, debug=False, use_mmap=False,
-                 bone=False, vel=False, sub=False, adversarial=False, free=False):
-        """
-        :param data_path:
-        :param label_path:
-        :param split: training set or test set
-        :param random_choose: If true, randomly choose a portion of the input sequence
-        :param random_shift: If true, randomly pad zeros at the begining or end of sequence
-        :param random_move:
-        :param random_rot: rotate skeleton around xyz axis
-        :param window_size: The length of the output sequence
-        :param normalization: If true, normalize input sequence
-        :param debug: If true, only use the first 100 samples
-        :param use_mmap: If true, use mmap mode to load data, which can save the running memory
-        :param bone: use bone modality or not
-        :param vel: use motion modality or not
-        :param only_label: only load label for ensemble score compute
-        """
+                 bone=False, vel=False, sub=False, adversarial=False, free=False, ae=False, ae_path=None, 
+                 get_misclassified=False, indices=None):
 
         self.debug = debug
         self.data_path = data_path
@@ -43,6 +28,10 @@ class Feeder(Dataset):
         self.sub = sub
         self.adversarial = adversarial
         self.free = free
+        self.ae = ae
+        self.ae_path = ae_path
+        self.get_misclassified = get_misclassified
+        self.indices = indices
         self.load_data()
             
         if normalization:
@@ -60,8 +49,20 @@ class Feeder(Dataset):
             self.label = np.where(npz_data['y_val'] > 0)[1]
             self.sample_name = ['val_' + str(i) for i in range(len(self.data))]
         elif self.split == 'test':
-            self.data = npz_data['x_test']
+            if self.ae:
+                npz_data2 = np.load(self.ae_path)
+                self.data = npz_data2['x_test'].transpose(0, 2, 4, 3, 1).reshape(-1, 300, 150)
+            else:
+                self.data = npz_data['x_test']
+                
             self.label = np.where(npz_data['y_test'] > 0)[1]
+            
+            if self.get_misclassified:
+                with open(self.indices, 'rb') as f:
+                    indices = pickle.load(f)
+                self.data = self.data[indices]
+                self.label = self.label[indices]
+            
             self.sample_name = ['test_' + str(i) for i in range(len(self.data))]
         else:
             raise NotImplementedError('data split only supports train/test')
