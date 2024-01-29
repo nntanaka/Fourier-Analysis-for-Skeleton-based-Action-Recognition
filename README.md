@@ -99,7 +99,7 @@ cd ..
 ```
 
 To get the spectrum of adversarial perturbation, we should do some processes.  
-First, we collect the indices of data that can be corrrectly classified by the models.
+First, we collect the indices of data that can be corrrectly classified by the model.
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/test_joint.yaml --save-ind True --ind-name stgcn_joint_indices.pkl
 ```
