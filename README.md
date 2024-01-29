@@ -21,7 +21,7 @@ Many thanks to the authors for all their works.
 ## Installation
 ### Environment
 In our experiments, we used `Python = 3.7.10`.  
-To set up environment, run;
+To set up environment, run
 ```
 pip install -r requirements.txt
 cd torchlight
@@ -32,7 +32,7 @@ cd ..
 
 ### Dataset
 You can download NTU RGB+D dataset from [official website](https://rose1.ntu.edu.sg/dataset/actionRecognition/), and you place it in `./dataset/data/ntu/ntu_raw/`.  
-Then, run;
+Then, run
 ```
 cd ./dataset/data/ntu
 python get_raw_skes_data.py
@@ -43,38 +43,38 @@ cd ../../..
 
 
 ## Training
-To train the model, run;
+To train the model, run
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/train_joint.yaml
 ```
-When you train the model by adversarial training, run;
+When you train the model by adversarial training, run
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/train_free_joint.yaml
 ```
 When you use the trained models, you should write the trained model's path to first line of yaml files in `./config/st_gcn/ntu-xsub/`.
 
 ## Testing
-To test these models, run;
+To test these models, run
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/test_joint.yaml
 python main.py recognition -c config/st_gcn/ntu-xsub/test_free_joint.yaml
 ```
 
 ## Adversarial Attack
-To attack these models by PGD, run;
+To attack these models by PGD, run
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/attack_joint.yaml
 python main.py recognition -c config/st_gcn/ntu-xsub/attack_free_joint.yaml
 ```
 
-To evaluate these attacks, run;
+To evaluate these attacks, run
 ```
 python main.py recognition -c config/st_gcn/ntu-xsub/test_joint_ae.yaml
 python main.py recognition -c config/st_gcn/ntu-xsub/test_free_joint_ae.yaml
 ```
 
 ## Common Corruptions
-To make corrupted data, run;
+To make corrupted data, run
 ```
 cd ./dataset
 python get_corruptions.py
@@ -82,7 +82,7 @@ cd ..
 ```
 
 ## Visualization of frequency spectrum
-To get frequency spectrum of input data, run;
+To get frequency spectrum of input data, run
 ```
 cd ./dataset
 python get_frequency.py
@@ -90,7 +90,7 @@ python plot_spectrum.py -p joint_input_spectrum.pkl
 cd ..
 ```
 
-To get the spectrum of corruption, run;
+To get the spectrum of corruption, run
 ```
 cd ./dataset
 python get_corrup_fre.py
@@ -109,7 +109,7 @@ Next, we get the adversarial examples that is misclassified by the model.
 python main.py recognition -c config/st_gcn/ntu-xsub/test_joint_ae2.yaml --ind-name stgcn_joint_indices.pkl --save-ae True
 ```
 
-Finally, run;
+Finally, run
 
 ```
 cd ./dataset
