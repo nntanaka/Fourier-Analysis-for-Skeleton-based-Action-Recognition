@@ -23,6 +23,8 @@ Many thanks to the authors for all their works.
 In our experiments, we used `Python = 3.7.10`.  
 To set up environment, run
 ```
+git clone https://github.com/nntanaka/Fourier-Analysis-for-Skeleton-based-Action-Recognition
+cd Fourier-Analysis-for-Skeleton-based-Action-Recognition
 pip install -r requirements.txt
 cd torchlight
 python setup.py install
